@@ -176,4 +176,56 @@ Visually, you can see this as the `slope` of the User's voting power curve:
 A steeper slope = the user's voting power is decaying faster.
 A shallower slope = the user's voting power is decaying slower.
 
-> You can write this as a simple derivative $`slope = \frac{d{VotingPower}}{dt}`$
+> You can write this as a simple derivative $`slope = \frac{d{VotingPower}}{dt}`$, we're not trying to be clever here, this is important to understand when thinking about total supply.
+
+We can therefore express a user's voting power at time t as a function of the `slope`.
+
+To keep things clean, we need to also make sure we use the correct `amount` at a given time (people may increase their amounts with new deposits).
+
+Aerodrome uses some further mathematical conventions here, we've already discussed `slope`, but they introduce the term `bias` to refer to voting power at a point in time.
+
+> Why bias? Bias / intercept are terms borrowed from mathematics (bias was used in the original Curve finance implementation). If we think of our user's historical voting power as series of curves, then at every point we define a new curve with a starting point of `bias`, and a rate of change of `slope`:
+
+![series-of-curves.png]
+
+With this info, we can rewrite our `UserPoint` struct, and also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
+
+```c
+struct UserPoint {
+   int128 bias;
+   int128 slope; // # -dweight / dt
+   uint256 ts;
+   uint256 blk; // block
+   // ignore for now: permanent is used for locks that are auto-renwed, non-decaying
+   uint256 permanent;
+}
+```
+
+And our evaluation of a user's historical voting power at `timestamp` is:
+
+```sol
+UserPoint memory lastPoint = getUserPointBefore(_tokenId, timestamp);
+votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp);
+```
+
+# TODO
+
+## Writing user checkpoints
+
+## Global Checkpoints & Total Supply
+
+### Scheduled curve changes and `dslope`
+
+# Other Curves
+
+## Increasing voting power
+
+## Nonlinear curves
+
+### Do you need total supply?
+
+### Linear approximations
+
+### Exact calculations and the EVM
+
+# extracting curves to separate modules
