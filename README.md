@@ -229,3 +229,30 @@ votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp)
 ### Exact calculations and the EVM
 
 # extracting curves to separate modules
+
+A generalized escrow contract needs to allow for different curve system. In the Aerodrome implementation, all logic lives inside `VotingEscrow.sol`. What we want is the following architecture:
+
+https://link.excalidraw.com/l/59mdtwjNJ4i/6pKEzIKkXQY
+
+What we want is that the curve logic, including the checkpointing state, is safely encapsulated into a single Escrow Curve contract, which is both parameterized for different curve types, and swappable depending on what implentation someone wants. The example curve types include:
+
+- Linear decreasing (default), used in Aerodrome, Velodrome, Curve etc.
+
+  - Vote decreases linearly over time
+  - Parameters:
+    - MAX_LOCK
+    - MIN_LOCK
+    - Epoch Length
+
+- Linear increasing: TBC
+
+  - Vote increases linearly over time
+  - Parameters:
+    - MAX_INCREASE
+    - MIN_LOCK
+    - epoch length
+
+- Non-linear Increasing:
+  - No totalSupply
+
+We first look at the extraction process.
