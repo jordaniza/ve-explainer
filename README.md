@@ -49,7 +49,7 @@ In Aerodrome, this function exists and is called `balanceOfNFTAt`.
 
 We might think of a simple way to implement it:
 
-```sol
+```solidity
 /// Not real code: this is just an example
 function balanceOfNFTAt(
   uint256 _tokenId,
@@ -137,7 +137,7 @@ So we _could_ define a struct `UserPoint` with fields `amount`, `endDate` and `t
 
 For a given timestamp `t` in the past, we would then find the nearest `UserPoint` _before_ `t`, and then recompute the voting power using the formula we used to calculate Alice's balance, above.
 
-```sol
+```solidity
 
 struct UserPoint {
     uint256 amount;
@@ -190,7 +190,7 @@ Aerodrome uses some further mathematical conventions here, we've already discuss
 
 With this info, we can rewrite our `UserPoint` struct, and also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
 
-```c
+```solidity
 struct UserPoint {
    int128 bias;
    int128 slope; // # -dweight / dt
@@ -203,7 +203,7 @@ struct UserPoint {
 
 And our evaluation of a user's historical voting power at `timestamp` is:
 
-```sol
+```solidity
 UserPoint memory lastPoint = getUserPointBefore(_tokenId, timestamp);
 votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp);
 ```
