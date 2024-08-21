@@ -77,29 +77,37 @@ By changing a lock we typically mean 1 of the following options:
 
 This is a case where the above code will fail.
 
-Consider the very simple example where Alice locks 10k \$AERO at t = 1000, the maximum lock time is 5000 and she locks for the full 5000 seconds.
+Why? Consider the very simple example where Alice locks 10k \$AERO at t = 1000, the maximum lock time is 5000 and she locks for the full 5000 seconds.
 
 At t = 2000, Alice's voting power can be calculated by:
 
+```c
 votingPowerPerSecondRemaining = 10,000 / 5000 = 2
 secondsRemainingAtTimestamp = 5000 - 2000 = 3000
-votingPower = 2 \* 3000 = 6000
+votingPower = 2 * 3000 = 6000
+```
 
 At t = 3000 she locks 10k more \$AERO.
 
 We calculate Alice's new voting power:
 
+```c
 votingPowerPerSecondRemaining = 20,000 / 5000 = 4
 secondsRemainingAtTimestamp = 5000 - 3000 = 2000
-votingPower = 4 \* 2000 = 8000
+votingPower = 4 * 2000 = 8000
+```
 
 But what happens when we now query Alice's voting power at t = 2000?
 
+```c
 votingPowerPerSecondRemaining = 20,000 / 5000 = 4
 secondsRemainingAtTimestamp = 5000 - 2000 = 3000
-votingPower = 4 \* 3000 = 12,000
+votingPower = 4 * 3000 = 12,000
+```
 
 _Because we have not kept track of historical balances, we incorrectly record Alice's past voting power as higher than it was at the time_.
+
+> Note as well, we haven't said anything yet about computing the total voting power across all users. This is important if we need to compute things like totalSupply, quorums etc. We will go into this in depth later.
 
 ## Solving our historical balances for the user
 
@@ -110,3 +118,62 @@ One option might be to mint a new veNFT for each lock. This is certainly possibl
 For some protocols, this has worked. Especially in the case of low numbers of locks, this is a simple approach that can be quite effective. On the other hand, for users who are frequently engaging with the protocol, managing large numbers of locks can get unwieldy, and aggregating voting power can be extremely expensive.
 
 What if, instead, we ensured we kept an historical record of locks.
+
+## Checkpoints: Approach 1
+
+Checkpoints are absolutely critical for understanding the escrow mechanism in protocols like Curve and Aerodrome.
+
+Put simply: a checkpoint is written to the ledger every time a user makes a change to their lock. This records any changes in the users lock at that time, so that historical queries can return an accurate view of past state.
+
+> If you're familar with vote delegation in ERC20Votes, the motivation is exactly the same: we store historic checkpoints of voting power every times a user transfers tokens or changes delegation. The implementation in veTokens is more advanced but shares many of the same principles.
+
+Our basic information that we need for a checkpoint for a user deposit is:
+
+1. How many governance tokens did the user have locked at that point?
+2. When does the user's lock end?
+3. When was the point recorded?
+
+So we _could_ define a struct `UserPoint` with fields `amount`, `endDate` and `timestamp`. Every time a user would modify a lock, we would record a new `UserPoint`.
+
+For a given timestamp `t` in the past, we would then find the nearest `UserPoint` _before_ `t`, and then recompute the voting power using the formula we used to calculate Alice's balance, above.
+
+```sol
+
+struct UserPoint {
+    uint256 amount;
+    uint256 endDate;
+    uint256 timestamp;
+}
+
+// store historic user checkpoints
+// we don't yet show checkpointing logic but you get the idea
+mapping (uint256 timestamp => UserPoint) userPointHistory;
+
+
+function balanceOfNftAt(uint256 _tokenId, uint256 t) public view returns (uint256 votingPower) {
+    // find the nearest user point before time t - we will come back to this part
+    // but it involves binary searching through past points
+    UserPoint memory checkpoint = getNearestUserPointBefore(_tokenId, t);
+
+    votingPowerPerSecondRemaining = checkpoint.amount / MAX_LOCK_TIME;
+    secondsRemainingAtTimestamp = checkpoint.endDate - t;
+    return votingPowerPerSecondRemaining * secondsRemainingAtTimestamp;
+}
+```
+
+## Checkpoints: Another way
+
+The above is okay but we can do better. Rather than recompute `votingPowerPerSecondRemaining`, why not just store it directly?
+
+In fact, we should talk a bit about the mathematics of `votingPowerPerSecondRemaining`, as it's crucial to understanding how voting power decays.
+
+`votingPowerPerSecondRemaining` is another way to express a _rate of change_, in our case, it's the _rate of change in voting power, with respect to time_.
+
+Visually, you can see this as the `slope` of the User's voting power curve:
+
+![slopes.png]
+
+A steeper slope = the user's voting power is decaying faster.
+A shallower slope = the user's voting power is decaying slower.
+
+> You can write this as a simple derivative $ slope = \frac{d{VotingPower}}{dt} $
