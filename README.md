@@ -176,4 +176,4 @@ Visually, you can see this as the `slope` of the User's voting power curve:
 A steeper slope = the user's voting power is decaying faster.
 A shallower slope = the user's voting power is decaying slower.
 
-> You can write this as a simple derivative $ slope = \frac{d{VotingPower}}{dt} $
+> You can write this as a simple derivative $`slope = \frac{d{VotingPower}}{dt}`$
