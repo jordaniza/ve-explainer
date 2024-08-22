@@ -297,33 +297,19 @@ mapping(uint256 => int128) public slopeChanges;
 
 > `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analgous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
 
-## TODO
+### Advanced: Computing Total Supply for Higher Order Polynomials
 
-## Writing checkpoints
+> This section is more advanced & speculative - so consider it a WIP but I thought it was interesting.
 
-## Reading via binary search
-
-# Other Curves
-
-## Increasing voting power
-
-## Nonlinear curves
-
-### Do you need total supply?
-
-### Linear approximations
-
-### Exact calculations and the EVM
-
-### Storing coefficients vs. values
-
-We noted above that polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
+Polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
 
 Fortunately, you can use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation).
 
 Specifically, you can migrate from storing just `dslope` in a schedule of `slopeChanges`, to storing a pairwise set of coefficients, every time a user changes a lock.
 
 Look at the below graph for 2 users, we have 4 curves:
+
+![image](https://github.com/user-attachments/assets/bfbd36d7-dcec-4749-826c-b7a5006bf66a)
 
 - Curve 1 is just the curve of user A
 - Curve 2 represents the aggregate curve of users A & B
@@ -395,6 +381,22 @@ The quadratic coefficients for each user are:
 - **Second Deposit (User 2)**: Adds to the existing curve, resulting in new aggregate coefficients $` (-11.25, 180) `$
 - **Expiry of User 1's Voting Power**: Adjusts the aggregate coefficients to reflect the removal of User 1's influence, leaving only User 2's curve.
 - **Expiry of User 2's Voting Power**: Brings the aggregate coefficients back to $` (0, 0) `$, indicating no remaining voting power.
+
+## TODO
+
+## Writing checkpoints
+
+## Reading via binary search
+
+# Other Curves
+
+## Increasing voting power
+
+## Nonlinear curves
+
+### Do you need total supply?
+
+### Linear approximations
 
 # extracting curves to separate modules
 
