@@ -236,7 +236,7 @@ votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp)
 
 A generalized escrow contract needs to allow for different curve system. In the Aerodrome implementation, all logic lives inside `VotingEscrow.sol`. What we want is the following architecture:
 
-https://link.excalidraw.com/l/59mdtwjNJ4i/6pKEzIKkXQY
+![image](https://github.com/user-attachments/assets/9824a33d-f9b5-4378-9780-c8381947c591)
 
 What we want is that the curve logic, including the checkpointing state, is safely encapsulated into a single Escrow Curve contract, which is both parameterized for different curve types, and swappable depending on what implentation someone wants. The example curve types include:
 
