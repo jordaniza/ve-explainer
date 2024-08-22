@@ -256,3 +256,18 @@ What we want is that the curve logic, including the checkpointing state, is safe
   - No totalSupply
 
 We first look at the extraction process.
+
+## IEscrowCurve
+
+Smart contracts work especially well in a Service Oriented Architecture (SOA) due to the EVM being a global, standardised runtime. This is a fancy way of saying: "we can split things up quite nicely".
+
+Our plan here is to move the relevant state involved in the escrow curve calculations _out_ of the main `VotingEscrow.sol` contract. This includes:
+
+- Checkpointing logic, in particular the internal checkpoint function
+- Structs concerning Global and User points
+- Mappings storing historical points
+- Epochs (TODO: ??????)
+
+We note also that the `BalanceLogicLibrary` from Aerodrome is convenient to inline into the curve, for the simple reason that the library is effectively achieving the same goal of logic abstraction, albeit while writing to the state of the calling contract.
+
+We instead create an entirely separate state. This does introduce some runtime overhead due to using the `CALL` opcode, but it means that different curves can be defined.
