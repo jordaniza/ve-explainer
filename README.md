@@ -192,15 +192,22 @@ Aerodrome uses some further mathematical conventions here, we've already discuss
 
 In the above chart you can see that, at 2 years, we add a new deposit without increasing the lock duration. This defines a new, steeper `slope` (a higher rate of decay in voting power), and a new bias - the new starting point of this "new" curve.
 
-With this info, we can rewrite our `UserPoint` struct, and also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
+With this info, we can rewrite our `UserPoint` struct. We move the user's _current_ balance and endDate into a separate struct `LockedBalance`, and then defined the `UserPoint` struct only to contain information about the user's _decay curve_ at that point in time. We also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
 
 ```solidity
+struct LockedBalance {
+    int128 amount;
+    uint256 end;
+   // ignore for now: permanent is used for locks that are auto-renewed, non-decaying
+    bool isPermanent;
+}
+
 struct UserPoint {
    int128 bias;
    int128 slope; // # -dweight / dt
    uint256 ts;
    uint256 blk; // block
-   // ignore for now: permanent is used for locks that are auto-renwed, non-decaying
+   // ignore for now: permanent is used for locks that are auto-renewed, non-decaying
    uint256 permanent;
 }
 ```
@@ -276,7 +283,19 @@ What we need to do, is have a way to log, at the point of deposit:
 - When the user's lock expires
 - How should we adjust the global curve when said lock expires
 
-> `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. Strictly speaking, this is a second derivative - `slope` is already a measure of how fast voting power decays, and so $`dslope = \frac{d^2VotingPower}{dt^2}`$
+Fortunately for us, we know all the above information - we store the `endDate` inside the `LockedBalance`, and we know the slope of the user's decay curve from `UserPoint`.
+
+What this means is that we can store a list of `slopeChanges`: times in the future when we need to _decrease_ the global `slope`, by removing the user's `slope`.
+
+Every time we create or alter a lock, we store a value `dslope` (change in slope) that will be scheduled at a point in time. We store this in a mapping:
+
+```solidity
+
+// timestamp => dslope
+mapping(uint256 => int128) public slopeChanges;
+```
+
+> `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analgous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
 
 ## TODO
 
@@ -295,6 +314,87 @@ What we need to do, is have a way to log, at the point of deposit:
 ### Linear approximations
 
 ### Exact calculations and the EVM
+
+### Storing coefficients vs. values
+
+We noted above that polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
+
+Fortunately, you can use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation).
+
+Specifically, you can migrate from storing just `dslope` in a schedule of `slopeChanges`, to storing a pairwise set of coefficients, every time a user changes a lock.
+
+Look at the below graph for 2 users, we have 4 curves:
+
+- Curve 1 is just the curve of user A
+- Curve 2 represents the aggregate curve of users A & B
+- Curve 3 is just the curve of user B
+- Curve 4 is zero
+
+What we can do then:
+
+1. Grab the coefficients of the _global curve_ and compute the coefficients for the _user curve_
+2. Combine the coefficients of the _global curve_ with the new _user curve_ to compute a new _global curve_
+3. Schedule a time t = endDate when we will adjust the _global curve_ by removing the _user curve_ -> this is a curve `delta` that can be aggregated across multiple users.
+
+### Example
+
+## Scenario
+
+- **User 1** deposits at $` t_1 = 0 `$ with an initial voting power $` V_{0,1} = 100 `$
+- **User 2** deposits at $` t_2 = 2 `$ (2 years later) with an initial voting power $` V_{0,2} = 80 `$
+
+## Coefficients
+
+Given the function:
+
+$` V_i(t) = V_{0,i} \cdot \left(1 - \frac{(t - t_i)^2}{16}\right) `$
+
+The quadratic coefficients for each user are:
+
+- $` a_i = -\frac{V_{0,i}}{16} `$
+- $` c_i = V_{0,i} `$
+
+## Process
+
+1. **At $`t = 0`**: User 1 deposits.
+
+   - **User 1's Coefficients**: $` \left(-\frac{100}{16}, 100\right) = (-6.25, 100) `$
+   - **Entry Delta**: Add $` (-6.25, 100) `$ to the aggregate coefficients.
+   - **Aggregate Coefficients After User 1's Deposit**: $` (-6.25, 100) `$
+   - **Exit Delta**: Schedule to subtract $` (-6.25, 100) `$ at $` t = 4 `$ (4 years after deposit).
+
+2. **At $`t = 2`**: User 2 deposits.
+
+   - **Current Aggregate Coefficients**: $` (-6.25, 100) `$(from User 1).
+   - **User 2's Coefficients**: $` (-5, 80) `$
+   - **Entry Delta**: Add $` (-5, 80) `$ to the aggregate coefficients.
+   - **Aggregate Coefficients After User 2's Deposit**: $` (-6.25 - 5, 100 + 80) = (-11.25, 180) `$
+   - **Exit Delta**: Schedule to subtract $` (-5, 80) `$ at $` t = 6 `$(4 years after User 2's deposit).
+
+3. **At $`t = 4`**: User 1’s voting power expires.
+
+   - **Apply Exit Delta**: Subtract $` (-6.25, 100) `$ from the aggregate coefficients.
+   - **Aggregate Coefficients After User 1's Exit**: $` (-11.25 + 6.25, 180 - 100) = (-5, 80) `$
+
+4. **At $`t = 6`**: User 2’s voting power expires.
+   - **Apply Exit Delta**: Subtract $` (-5, 80) `$ from the aggregate coefficients.
+   - **Aggregate Coefficients After User 2's Exit**: $` (-5 + 5, 80 - 80) = (0, 0) `$
+
+## Example Table
+
+| Time $` t `$ | Action                 | Aggregate Coefficients Before | Entry/Exit Delta       | Aggregate Coefficients After |
+| ------------ | ---------------------- | ----------------------------- | ---------------------- | ---------------------------- |
+| 0            | User 1 deposits        | (0, 0)                        | (+) $` (-6.25, 100) `$ | $` (-6.25, 100) `$           |
+| 2            | User 2 deposits        | $` (-6.25, 100) `$            | (+) $` (-5, 80) `$     | $` (-11.25, 180) `$          |
+| 4            | User 1's power expires | $` (-11.25, 180) `$           | (-) $` (-6.25, 100) `$ | $` (-5, 80) `$               |
+| 6            | User 2's power expires | $` (-5, 80) `$                | (-) $` (-5, 80) `$     | $` (0, 0) `$                 |
+
+## Summary
+
+- **Initial Deposit (User 1)**: Starts with the curve $` V(t) = 100 \cdot \left(1 - \frac{t^2}{16}\right) `$ with coefficients $` (-6.25, 100) `$
+- **Second Deposit (User 2)**: Adds to the existing curve, resulting in new aggregate coefficients $` (-11.25, 180) `$
+- **Expiry of User 1's Voting Power**: Adjusts the aggregate coefficients to reflect the removal of User 1's influence, leaving only User 2's curve.
+- **Expiry of User 2's Voting Power**: Brings the aggregate coefficients back to $` (0, 0) `$, indicating no remaining voting power.
 
 # extracting curves to separate modules
 
