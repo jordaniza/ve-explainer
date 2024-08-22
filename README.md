@@ -212,13 +212,57 @@ UserPoint memory lastPoint = getUserPointBefore(_tokenId, timestamp);
 votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp);
 ```
 
-# TODO
-
-## Writing user checkpoints
-
 ## Global Checkpoints & Total Supply
 
+So far we've covered _user_ checkpointing - that is to say, recording historical balances for one user.
+
+What we haven't covered is "Global" checkpoints - that is capturing the historical snapshot of voting power _across all users at any point in history_.
+
+Having a global view of the entire system allows us to compute certain key metrics like total voting power - which is absolutely key in certain governance systems, for example:
+
+- A system that require minimum voting quorums for proposals to pass.
+- Systems that need to implicitly re-allocate unused voting power.
+- Systems that need to normalise vote weights over total voting power (where 'not voting' is still a vote)
+- etc.
+
+> It's worth stressing here: _not all governance systems need to know total supply_. Computing the global state of these systems onchain is significantly more challenging than computing the voting power for a single user, so it's worth asking ourselves if our particular governance system needs such a view.
+
+It's of course possible to evaluate every User Point at a given time, and add the results. This could be feasible offchain even for moderate numbers of voters, but it rapidly becomes untenable onchain, simply due to the nature of the EVM and the high cost of onchain compute and storage reads.
+
+### Solution: a series of changes
+
+What can we do to solve this problem?
+
+Well, it helps to remind ourselves of 3 facts:
+
+1. Global voting power at time `t` is just the aggregate of all User voting power at time `t`
+2. Every time we make a change to User Voting power, we record it as a `UserPoint`
+3. The only time global voting power will change, is when User Voting power changes
+
+The consequence of 2 & 3 is that we can just update _global voting power_ every time we update _user voting power_. We can use the same parameters as above for user points: bias, slope and timestamp/block to record a `GlobalPoint`, much like a `UserPoint`:
+
+```solidity
+    struct GlobalPoint {
+        int128 bias;
+        int128 slope; // # -dweight / dt
+        uint256 ts;
+        uint256 blk; // block
+        // again - ignore this for now
+        uint256 permanentLockBalance;
+    }
+```
+
+You can see an example of the global curve vs. the user curve in the chart below:
+
+At this point, you should be asking something: this chart extends for 6 years, and in the final 2, _the slope changes again_
+
 ### Scheduled curve changes and `dslope`
+
+## TODO
+
+## Writing checkpoints
+
+## Reading via binary search
 
 # Other Curves
 
