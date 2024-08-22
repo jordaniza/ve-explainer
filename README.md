@@ -242,23 +242,41 @@ Well, it helps to remind ourselves of 3 facts:
 The consequence of 2 & 3 is that we can just update _global voting power_ every time we update _user voting power_. We can use the same parameters as above for user points: bias, slope and timestamp/block to record a `GlobalPoint`, much like a `UserPoint`:
 
 ```solidity
-    struct GlobalPoint {
-        int128 bias;
-        int128 slope; // # -dweight / dt
-        uint256 ts;
-        uint256 blk; // block
-        // again - ignore this for now
-        uint256 permanentLockBalance;
-    }
+struct GlobalPoint {
+    int128 bias;
+    int128 slope; // # -dweight / dt
+    uint256 ts;
+    uint256 blk; // block
+    // again - ignore this for now
+    uint256 permanentLockBalance;
+}
 ```
 
-You can see an example of the global curve vs. the user curve in the chart below:
+You can see an example of the global curve vs. the user curve in the chart below, in this example:
+
+- User A deposits 100 $AERO at t = 0, for the full 4 years. The slope of the _global_ supply is exactly the same as the slope of User A
+- At t = 2 years, user B deposits 50 $AERO. You see the curve jump as it now represents the _combination_ of users A & B
+- At t = 4 years, user A's tokens fully unlock and _their curve is removed from the global curve_
+- For the years t = 4 -> t = 6, the curve is now simply the curve of user B
 
 ![image](https://github.com/user-attachments/assets/7b604cfc-1d6d-4b13-831b-804f4ea3bb08)
 
-At this point, you should be asking something: this chart extends for 6 years, and in the final 2, _the slope changes again_
+The important point here is that we have all the information to build the _global_ curve if we adjust it when setting every _user_ curve.
+
+You should now be asking: what about that last part?
+
+The final 2 years after User A's stake unlocks changes the shape of the curve, and this doesn't appear to be stored anywhere in `slope` or `bias`.
+
+This is entirely correct, and constitutes one of the more tricky parts of building out a global supply - how do we "schedule" changes to the slope _in the future_.
 
 ### Scheduled curve changes and `dslope`
+
+What we need to do, is have a way to log, at the point of deposit:
+
+- When the user's lock expires
+- How should we adjust the global curve when said lock expires
+
+> `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. Strictly speaking, this is a second derivative - `slope` is already a measure of how fast voting power decays, and so $`dslope = \frac{d^2VotingPower}{dt^2}`$
 
 ## TODO
 
