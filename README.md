@@ -254,6 +254,8 @@ The consequence of 2 & 3 is that we can just update _global voting power_ every 
 
 You can see an example of the global curve vs. the user curve in the chart below:
 
+![image](https://github.com/user-attachments/assets/7b604cfc-1d6d-4b13-831b-804f4ea3bb08)
+
 At this point, you should be asking something: this chart extends for 6 years, and in the final 2, _the slope changes again_
 
 ### Scheduled curve changes and `dslope`
