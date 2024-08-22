@@ -1,5 +1,32 @@
 # Understanding Checkpoints in veGovernance
 
+# Table of Contents
+
+- [Understanding Checkpoints in veGovernance](#understanding-checkpoints-in-vegovernance)
+  - [Intro](#intro)
+  - [Aerodrome and Mechanics](#aerodrome-and-mechanics)
+  - [Voting power](#voting-power)
+  - [Fetching Historic Voting Power](#fetching-historic-voting-power)
+  - [Solving our historical balances for the user](#solving-our-historical-balances-for-the-user)
+  - [Checkpoints: Approach 1](#checkpoints-approach-1)
+  - [Checkpoints: Another way](#checkpoints-another-way)
+  - [Global Checkpoints & Total Supply](#global-checkpoints--total-supply)
+    - [Solution: a series of changes](#solution-a-series-of-changes)
+    - [Scheduled curve changes and `dslope`](#scheduled-curve-changes-and-dslope)
+    - [Advanced: Computing Total Supply for Higher Order Polynomials](#advanced-computing-total-supply-for-higher-order-polynomials)
+    - [Example](#example)
+  - [TODO](#todo)
+  - [Writing checkpoints](#writing-checkpoints)
+  - [Reading via binary search](#reading-via-binary-search)
+- [Other Curves](#other-curves)
+  - [Increasing voting power](#increasing-voting-power)
+  - [Nonlinear curves](#nonlinear-curves)
+    - [Do you need total supply?](#do-you-need-total-supply)
+    - [Linear approximations](#linear-approximations)
+- [Extracting curves to separate modules](#extracting-curves-to-separate-modules)
+  - [IEscrowCurve](#iescrowcurve)
+
+
 ## Intro
 
 Vote-Escrowed Tokens ("veTokens") represent a form of token design where token holders must lock/stake governance tokens for periods of time in order to vote in a Decentralized Autonomous Organization ("DAO").
