@@ -171,12 +171,14 @@ In fact, we should talk a bit about the mathematics of `votingPowerPerSecondRema
 
 Visually, you can see this as the `slope` of the User's voting power curve:
 
-![slopes.png]
-
 A steeper slope = the user's voting power is decaying faster.
 A shallower slope = the user's voting power is decaying slower.
 
-> You can write this as a simple derivative $`slope = \frac{d{VotingPower}}{dt}`$, we're not trying to be clever here, this is important to understand when thinking about total supply.
+Note that the `slope` here is _purely_ a function of the amount of $AERO tokens a user locks, because every user will go from 100% to 0% voting power per $AERO over a 4 year period:
+
+![image](https://github.com/user-attachments/assets/54791691-edc4-4523-b3c9-77253c4de4cf)
+
+> You can write this as a simple derivative $`slope = \frac{d{VotingPower}}{dt}`$. We're not trying to be clever here, this is important to understand when thinking about total supply.
 
 We can therefore express a user's voting power at time t as a function of the `slope`.
 
