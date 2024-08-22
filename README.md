@@ -331,7 +331,7 @@ Polynomial decay functions with orders higher than 1 (aka: quadratic and beyond)
 
 That said, you can in theory use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation). 
 
-> I'm not 100% sure if this generalises to all slopes, but we can show a worked example for a simple curve in $`x^2`$ - I'd argue that cubic and beyond curves most likely introduce needless complexity with minimal benefit, at least in the voting escrow case.
+> I'm not 100% sure if this generalises to all slopes, but we can show a worked example for a simple curve in $`x^2`$ - I'd argue that there may be value in a cubic curve, but beyond that you most likely introduce needless complexity with minimal benefit, at least in the voting escrow case.
 
 Specifically, you can migrate from storing just `dslope` in a schedule of `slopeChanges`, to storing a pairwise set of coefficients, every time a user changes a lock.
 
