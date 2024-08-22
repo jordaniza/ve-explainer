@@ -330,7 +330,9 @@ mapping(uint256 => int128) public slopeChanges;
 
 Polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
 
-Fortunately, you can use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation).
+That said, you can in theory use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation). 
+
+> I'm not 100% sure if this generalises to all slopes, but we can show a worked example for a simple curve in $`x^2`$ - I'd argue that cubic and beyond curves most likely introduce needless complexity with minimal benefit, at least in the voting escrow case.
 
 Specifically, you can migrate from storing just `dslope` in a schedule of `slopeChanges`, to storing a pairwise set of coefficients, every time a user changes a lock.
 
@@ -369,14 +371,14 @@ The quadratic coefficients for each user are:
 
 ## Process
 
-1. **At $`t = 0`**: User 1 deposits.
+1. **At `t = 0`**: User 1 deposits.
 
    - **User 1's Coefficients**: $` \left(-\frac{100}{16}, 100\right) = (-6.25, 100) `$
    - **Entry Delta**: Add $` (-6.25, 100) `$ to the aggregate coefficients.
    - **Aggregate Coefficients After User 1's Deposit**: $` (-6.25, 100) `$
    - **Exit Delta**: Schedule to subtract $` (-6.25, 100) `$ at $` t = 4 `$ (4 years after deposit).
 
-2. **At $`t = 2`**: User 2 deposits.
+2. **At `t = 2`**: User 2 deposits.
 
    - **Current Aggregate Coefficients**: $` (-6.25, 100) `$(from User 1).
    - **User 2's Coefficients**: $` (-5, 80) `$
@@ -384,12 +386,12 @@ The quadratic coefficients for each user are:
    - **Aggregate Coefficients After User 2's Deposit**: $` (-6.25 - 5, 100 + 80) = (-11.25, 180) `$
    - **Exit Delta**: Schedule to subtract $` (-5, 80) `$ at $` t = 6 `$(4 years after User 2's deposit).
 
-3. **At $`t = 4`**: User 1’s voting power expires.
+3. **At `t = 4`**: User 1’s voting power expires.
 
    - **Apply Exit Delta**: Subtract $` (-6.25, 100) `$ from the aggregate coefficients.
    - **Aggregate Coefficients After User 1's Exit**: $` (-11.25 + 6.25, 180 - 100) = (-5, 80) `$
 
-4. **At $`t = 6`**: User 2’s voting power expires.
+4. **At `t = 6`**: User 2’s voting power expires.
    - **Apply Exit Delta**: Subtract $` (-5, 80) `$ from the aggregate coefficients.
    - **Aggregate Coefficients After User 2's Exit**: $` (-5 + 5, 80 - 80) = (0, 0) `$
 
