@@ -188,7 +188,9 @@ Aerodrome uses some further mathematical conventions here, we've already discuss
 
 > Why bias? Bias / intercept are terms borrowed from mathematics (bias was used in the original Curve finance implementation). If we think of our user's historical voting power as series of curves, then at every point we define a new curve with a starting point of `bias`, and a rate of change of `slope`:
 
-![series-of-curves.png]
+![image](https://github.com/user-attachments/assets/e704ddd3-93a6-433d-b9d5-122209315136)
+
+In the above chart you can see that, at 2 years, we add a new deposit without increasing the lock duration. This defines a new, steeper `slope` (a higher rate of decay in voting power), and a new bias - the new starting point of this "new" curve.
 
 With this info, we can rewrite our `UserPoint` struct, and also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
 
