@@ -37,7 +37,7 @@ Assuming you don't opt for a permanent lock, you can choose to lock \$AERO for b
 
 As the end date of your lock approaches, your voting power decreases. This can be visualised in the graph below:
 
-![./images/decay-curve-linear.png]
+![image](https://github.com/user-attachments/assets/01474031-5168-4549-b1d2-92bc59be613f)
 
 ## Fetching Historic Voting Power
 
