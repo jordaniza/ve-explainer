@@ -454,9 +454,9 @@ You can certainly do this, but it's not especially intuitive what's going on.
 
 We need a formula for our curve that actually encompasses the correct variables. Consider a standard line as $`y = mx + c`$
 
-In our case $`voting_power_{i,t} = slope_i \times time^* + starting_power_i`$
+In our case $`votingPower_{i,t} = slope_i \times time^* + startingPower_i`$
 
-\*`time` in this case could be time remaining or time since lock
+\*$`time`$ in this case could be time remaining or time since lock
 
 In our case, we need a generalised formula for `slope`, this is a function of:
 
