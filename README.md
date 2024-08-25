@@ -468,8 +468,8 @@ In our case, we need a generalised formula for `slope`, this is a function of:
 
 Let’s define the parameters:
 
-1. **Initial Voting Power (`V_initial`)**: The starting voting power at $`t = 0`$. This could be 0% of the defined amount, 100%, or any other initial state.
-2. **Final Voting Power (`V_final`)**: The voting power desired at the end of the duration. This could be 100% of the defined amount, 0%, or any other final state.
+1. **Initial Voting Power (`V_{initial}`)**: The starting voting power at $`t = 0`$. This could be 0% of the defined amount, 100%, or any other initial state.
+2. **Final Voting Power (`V_{final}`)**: The voting power desired at the end of the duration. This could be 100% of the defined amount, 0%, or any other final state.
 3. **Duration (`duration`)**: The time period over which the change occurs.
 4. **Slope (`slope`)**: The rate of change of voting power per unit time.
 
@@ -484,29 +484,29 @@ Where:
 
 #### Applying Initial and Final Conditions
 
-1. **Initial Condition**: At $`t = 0`$, voting power is $`V_initial`$.
+1. **Initial Condition**: At $`t = 0`$, voting power is $`V_{initial}`$.
 
-   $`votingPower(0) = c = V_initial`$
+   $`votingPower(0) = c = V_{initial}`$
 
    So, the equation becomes:
 
-   $`votingPower(t) = slope \times t + V_initial`$
+   $`votingPower(t) = slope \times t + V_{initial}`$
 
-2. **Final Condition**: At $`t = duration`$, voting power should be $`V_final`$.
+2. **Final Condition**: At $`t = duration`$, voting power should be $`V_{final}`$.
 
-   $`votingPower(duration) = slope \times duration + V_initial = V_final`$
+   $`votingPower(duration) = slope \times duration + V_{initial} = V_{final}`$
 
    Rearranging to solve for $`slope`$:
 
-   $`slope \times duration = V_final - V_initial`$
+   $`slope \times duration = V_{final} - V_{initial}`$
 
-   $`slope = \frac{V_final - V_initial}{duration}`$
+   $`slope = \frac{V_{final} - V_{initial}}{duration}`$
 
 ### Generalized Voting Power Formula
 
 Substituting $`slope`$ back into the linear equation, we get:
 
-$`votingPower(t) = \left(\frac{V_final - V_initial}{duration}\right) \times t + V_initial`$
+$`votingPower(t) = \left(\frac{V_{final} - V_{initial}}{duration}\right) \times t + V_{initial}`$
 
 ### Adjusting Global points on entry/exit
 
