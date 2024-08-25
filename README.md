@@ -508,9 +508,98 @@ Substituting $`slope`$ back into the linear equation, we get:
 
 $`votingPower(t) = \left(\frac{V_{final} - V_{initial}}{duration}\right) \times t + V_{initial}`$
 
-### Adjusting Global points on entry/exit
+You can see some examples:
+
+**100% -> 0% over 4 years**
+
+- duration = 4 years
+- V_initial = amount
+- V_final = 0
+- Initial value = amount
+- bound at 0% or 4 years
+
+- $`slope = \frac{0 - amount}{4 years}`$
+- $`slope = -\frac{amount}{4 years}`$
+
+**0% -> 100% over 2 years**
+
+- duration = 2 years
+- V_initial = 0
+- V_final = amount
+- initial value = 0
+- bound at 2y OR 2x amount
+
+- $`slope = \frac{amount - 0}{4 years}`$
+- $`slope = \frac{amount}{2 years}`$
+
+\*\*100% -> 600% over 6 weeks
+
+- duration = 6 weeks
+- V_initial = amount
+- V_final = 6 \* amount
+- initial value = amount
+- bound at 6 weeks OR 6x amount
+
+- $`slope = \frac{5}{6 weeks}`$
+
+> Note that the above slope is 5 / (6 weeks), NOT 6, this is because we are increasing voting power by 5x
+
+#### Implementing in code:
+
+We can define a generalised `getSlope` function
+
+```solidity
+// we may wish to use scaling factors or even fixed point libraries to increase precision but we don't need here
+function getSlope(uint256 amount, uint256 multiplier, uint256 duration) public pure returns (int128 slope) {
+    int128 v_inital = amount.toInt128();
+    int128 v_final = (amount * multiplier).toInt128();
+    return (v_final - v_initial) / duration.toInt128();
+}
+
+function getBiasUnbound(uint256 amount, uint256 timestamp, int128 slope) public pure returns (uint256) {
+    // y = mt + c
+    int128 bias = slope * timestamp.toInt128() + amount.toInt128();
+    // never return negative values
+    return bias < 0 ? 0 : uint256(bias);
+}
+
+// The above assumes a boundary - this is applicable for most use cases and it is trivial to set
+// a sentinel value of max(uint256) if you want an unbounded increase
+function getBias(uint256 amount, uint256 multiplier, uint256 duration, uint256 timestamp, uint256 boundary) public pure returns (uint256) {
+    int128 slope = getSlope(amount, multiplier, duration);
+    // unchanging voting power
+    if (slope == 0) return amount * multiplier;
+    uint256 bias = getBiasUnbound(amount, timestamp, slope);
+    // bound increasing voting power to max @ boundary
+    if (slope > 0 && bias > boundary) return boundary;
+    // bound decreasing voting power to min @ boundary
+    if (slope < 0 && bias < boundary) return boundary;
+    return bias;
+}
+```
+
+We can use these functions in our checkpoint logic: calulating slopes and biases on our `UserPoint` for `uNew` and `uOld` as needed.
+
+- We can define constants or getters for our `multiplier`, `amount`, `duration` and `boundary` inside our curve
+- The above functions can be public view functions for easy testing.
+- When we call u{state}.slope, we call `getSlope`
+- When we call u{state}.bias, we call `getBias`
+  - We should regression test to see if there are valid examples where we need an unbound bias.
+- Last point bias and slope calcs can also use these functions. We no longer require slope to be > 0 as we are allowing slope to be +/- 
+  - Globally, we use unbound bias conditions - a per-user bias does not apply to the global voting power.
+- Permanent lock balance needs its own treatment. It does not make sense in an increasing slope. 
+- We can do the same adjustments to the user adjustments of last point and bias, but we do not need the boundary condition on slope as it can be negative.
+- See below for dslope changes.
 
 ### Max values and dslope
+
+The above covers the user side of things, but what about dslope?
+
+Realistically speaking, we could do away with dslope in the increasing case with unbounded voting power increases. Technically voting power caps at `uint256.max` but we wont run into that, unless we have an extreme choice for multiplier or token decimals (in the linear case - for h/o polynomials, this is a bit more complicated).
+
+Most implementations will likely bound a max-voting power, to stop the case where incumbent voters completely dominate the DAO with no hope for new participants to catch up. In this case, we need an equivalent of `dslope` to indicate where the global curve should get shallower, as a user's voting power levels out. 
+
+Fortunately for us, this change is the same in both the negative and positive slope cases. The change in slope (dslope) is always decreasing - we don't allow for scheduled increases in voting power in the linear case. 
 
 ### Do you need slopes and biases?
 
@@ -521,9 +610,9 @@ We saw above that, in order to calculate a bounded maximum voting power multiple
 
 Therefore, it may make sense for us to simply create 1 NFT per lock and not allow modifications.
 
-In this case, our `balanceOfNFTAt` would be more easily written with simply the lock created date + the elapsed time.
+In this case, our `balanceOfNFTAt` could be more easily written with simply the lock created date + the elapsed time.
 
-Our UserPoints can be safely deprecated (although we will still need `dslopes` as will be explained below). This mostly means we can save a few storage writes by writing to userPointHistory and userPointEpoch. We still need to write to global points.
+Our UserPoints could then be safely deprecated (although we will still need `dslopes` as will be explained below). This mostly means we can save a few storage writes by writing to userPointHistory and userPointEpoch. We still need to write to global points.
 
 Note that we may, wish to allow `Merging` -> combining multiple veNFTs with the most recent lock taking precedence. The use case here would be a user with multiple locks reaching the max duration, wishing to consolidate positions.
 
