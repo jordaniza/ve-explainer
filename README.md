@@ -1,5 +1,30 @@
 # Understanding Checkpoints in veGovernance
 
+# Table of Contents
+
+- [Understanding Checkpoints in veGovernance](#understanding-checkpoints-in-vegovernance)
+  - [Intro](#intro)
+  - [Aerodrome and Mechanics](#aerodrome-and-mechanics)
+  - [Voting power](#voting-power)
+  - [Fetching Historic Voting Power](#fetching-historic-voting-power)
+  - [Solving our historical balances for the user](#solving-our-historical-balances-for-the-user)
+  - [Checkpoints: Approach 1](#checkpoints-approach-1)
+  - [Checkpoints: Another way](#checkpoints-another-way)
+  - [Global Checkpoints & Total Supply](#global-checkpoints--total-supply)
+    - [Solution: a series of changes](#solution-a-series-of-changes)
+    - [Scheduled curve changes and `dslope`](#scheduled-curve-changes-and-dslope)
+    - [Advanced: Computing Total Supply for Higher Order Polynomials](#advanced-computing-total-supply-for-higher-order-polynomials)
+  - [TODO](#todo)
+    - [Writing checkpoints](#writing-checkpoints)
+    - [Reading via binary search](#reading-via-binary-search)
+    - [Other Curves](#other-curves)
+      - [Increasing voting power](#increasing-voting-power)
+      - [Nonlinear curves](#nonlinear-curves)
+        - [Do you need total supply?](#do-you-need-total-supply)
+        - [Linear approximations](#linear-approximations)
+- [Extracting curves to separate modules](#extracting-curves-to-separate-modules)
+  - [IEscrowCurve](#iescrowcurve)
+
 ## Intro
 
 Vote-Escrowed Tokens ("veTokens") represent a form of token design where token holders must lock/stake governance tokens for periods of time in order to vote in a Decentralized Autonomous Organization ("DAO").
@@ -297,16 +322,6 @@ mapping(uint256 => int128) public slopeChanges;
 
 > `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analgous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
 
-## TODO
-
-## Writing checkpoints
-
-## Reading via binary search
-
-# Other Curves
-
-In this section we explore techniques to implment additional curve types other than linear decreasing.
-
 ## Increasing voting power
 
 Increasing voting power refers to the scenario where a user's voting power gets larger, the longer the user is staked.
@@ -520,17 +535,27 @@ Note that we may, wish to allow `Merging` -> combining multiple veNFTs with the 
 
 ### Linear approximations
 
-### Exact calculations and the EVM
+### Advanced: Computing Total Supply for Higher Order Polynomials
 
-### Storing coefficients vs. values
+In this section we explore techniques to implment additional curve types other than linear decreasing.
+
+> This section is more advanced & speculative - so consider it a WIP but I thought it was interesting.
+
+Polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
+
+That said, you can in theory use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation).
 
 We noted above that polynomial decay functions with orders higher than 1 (aka: quadratic and beyond) are challenging in the EVM to compute in closed form. This is because we run into the same problem as with the linear curve: evaulating at time t in the naive way would require recomputing voting power for all users.
 
 Fortunately, you can use an extremely similar approach as Curve/Aerodrome use in the linear case to compute higher order functions (although this is experimental and I would advise being careful with the implementation).
 
+> I'm not 100% sure if this generalises to all slopes, but we can show a worked example for a simple curve in $`x^2`$ - I'd argue that there may be value in a cubic curve, but beyond that you most likely introduce needless complexity with minimal benefit, at least in the voting escrow case.
+
 Specifically, you can migrate from storing just `dslope` in a schedule of `slopeChanges`, to storing a pairwise set of coefficients, every time a user changes a lock.
 
 Look at the below graph for 2 users, we have 4 curves:
+
+![image](https://github.com/user-attachments/assets/bfbd36d7-dcec-4749-826c-b7a5006bf66a)
 
 - Curve 1 is just the curve of user A
 - Curve 2 represents the aggregate curve of users A & B
@@ -563,14 +588,14 @@ The quadratic coefficients for each user are:
 
 ## Process
 
-1. **At $`t = 0`**: User 1 deposits.
+1. **At `t = 0`**: User 1 deposits.
 
    - **User 1's Coefficients**: $` \left(-\frac{100}{16}, 100\right) = (-6.25, 100) `$
    - **Entry Delta**: Add $` (-6.25, 100) `$ to the aggregate coefficients.
    - **Aggregate Coefficients After User 1's Deposit**: $` (-6.25, 100) `$
    - **Exit Delta**: Schedule to subtract $` (-6.25, 100) `$ at $` t = 4 `$ (4 years after deposit).
 
-2. **At $`t = 2`**: User 2 deposits.
+2. **At `t = 2`**: User 2 deposits.
 
    - **Current Aggregate Coefficients**: $` (-6.25, 100) `$(from User 1).
    - **User 2's Coefficients**: $` (-5, 80) `$
@@ -578,12 +603,12 @@ The quadratic coefficients for each user are:
    - **Aggregate Coefficients After User 2's Deposit**: $` (-6.25 - 5, 100 + 80) = (-11.25, 180) `$
    - **Exit Delta**: Schedule to subtract $` (-5, 80) `$ at $` t = 6 `$(4 years after User 2's deposit).
 
-3. **At $`t = 4`**: User 1’s voting power expires.
+3. **At `t = 4`**: User 1’s voting power expires.
 
    - **Apply Exit Delta**: Subtract $` (-6.25, 100) `$ from the aggregate coefficients.
    - **Aggregate Coefficients After User 1's Exit**: $` (-11.25 + 6.25, 180 - 100) = (-5, 80) `$
 
-4. **At $`t = 6`**: User 2’s voting power expires.
+4. **At `t = 6`**: User 2’s voting power expires.
    - **Apply Exit Delta**: Subtract $` (-5, 80) `$ from the aggregate coefficients.
    - **Aggregate Coefficients After User 2's Exit**: $` (-5 + 5, 80 - 80) = (0, 0) `$
 
@@ -602,6 +627,22 @@ The quadratic coefficients for each user are:
 - **Second Deposit (User 2)**: Adds to the existing curve, resulting in new aggregate coefficients $` (-11.25, 180) `$
 - **Expiry of User 1's Voting Power**: Adjusts the aggregate coefficients to reflect the removal of User 1's influence, leaving only User 2's curve.
 - **Expiry of User 2's Voting Power**: Brings the aggregate coefficients back to $` (0, 0) `$, indicating no remaining voting power.
+
+## TODO
+
+## Writing checkpoints
+
+## Reading via binary search
+
+# Other Curves
+
+## Increasing voting power
+
+## Nonlinear curves
+
+### Do you need total supply?
+
+### Linear approximations
 
 # extracting curves to separate modules
 
@@ -646,7 +687,3 @@ Our plan here is to move the relevant state involved in the escrow curve calcula
 We note also that the `BalanceLogicLibrary` from Aerodrome is convenient to inline into the curve, for the simple reason that the library is effectively achieving the same goal of logic abstraction, albeit while writing to the state of the calling contract.
 
 We instead create an entirely separate state. This does introduce some runtime overhead due to using the `CALL` opcode, but it means that different curves can be defined.
-
-```
-
-```
