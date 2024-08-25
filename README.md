@@ -492,19 +492,19 @@ Where:
 
    $`\text{votingPower}(t) = mt + V_{\text{initial}}`$
 
-2. **Final Condition**: At $`t = d`$, voting power should be $`V_{\text{final}}`$.
+2. **Final Condition**: At $`t = duration`$, voting power should be $`V_{\text{final}}`$.
 
-   $`\text{votingPower}(d) = m \times d + V_{\text{initial}} = V_{\text{final}}`$
+   $`\text{votingPower}(duration) = m \times duration + V_{\text{initial}} = V_{\text{final}}`$
 
    Rearranging to solve for $`m`$:
 
-   $`m \times d = V_{\text{final}} - V_{\text{initial}}`$
+   $`m \times duration = V_{\text{final}} - V_{\text{initial}}`$
 
-   $`m = \frac{V_{\text{final}} - V_{\text{initial}}}{d}`$
+   $`m = \frac{V_{\text{final}} - V_{\text{initial}}}{duration}`$
 
 Substituting $`m`$ back into the linear equation, we get:
 
-$`\text{votingPower}(t) = \left(\frac{V_{\text{final}} - V_{\text{initial}}}{d}\right) \times t + V_{\text{initial}}`$
+$`\text{votingPower}(t) = \left(\frac{V_{\text{final}} - V_{\text{initial}}}{duration}\right) \times t + V_{\text{initial}}`$
 
 ### Adjusting Global points on entry/exit
 
