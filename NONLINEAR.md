@@ -89,23 +89,28 @@ The quadratic coefficients for each user are:
 - **Expiry of User 1's Voting Power**: Adjusts the aggregate coefficients to reflect the removal of User 1's influence, leaving only User 2's curve.
 - **Expiry of User 2's Voting Power**: Brings the aggregate coefficients back to $` (0, 0) `$, indicating no remaining voting power.
 
-## Increasing Voting power with Nonlinear curves
+# Increasing Voting power with Nonlinear curves
 
 Increasing voting power has a nice property that _extending_ a lock and _increasing amount_ make little sense. This means it's most realistic to offer new locks only, with a merge function at `duration`. If we wish to have a nonlinear curve without such functionality, then we can guarantee that the veNFT's currently locked amount and start date won't change, ergo `votingPower(t)` can just use the global `LockedBalance`.
 
 This means we can simply evaluate the curve at `t` and get the user's voting power. The problem comes with total supply.
 
-### Do you need total supply?
+## Do you need total supply?
 
-See the [section on quadratic curves](#Advanced: Computing Total Supply for Higher Order Polynomials) for this point.
-
-### Abandoning Total Supply
+We touch on this in the [README](./README.md) but not all governance systems need totalSupply.
 
 If we don't need total supply, and we are increasing in voting power _we don't need to checkpoint_. We simply evaluate the user's voting power at t according to the function.
 
-The main changes are then in auxilliary functions in our escrow code.
+The main changes are then in auxilliary functions in our escrow code, and whether we want to define our curve in terms of _coefficients_ or _absolute values_
 
-#### Migrations
+## Coefficients vs. absolutes
+
+We saw above that storing deltas of coefficients allows us to schedule changes to a quadratic curve. We also saw that this requires a more complex set of changes. 
+
+Alternatively, we can store absolute values. This means 
+
+
+# Migrations
 
 What if we wanted to migrate to a more complex system in the future - perhaps adding total supply for a nonlinear increasing curve?
 

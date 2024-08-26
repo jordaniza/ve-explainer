@@ -296,6 +296,24 @@ Our UserPoints could then be safely deprecated (although we will still need `dsl
 
 Note that we may, wish to allow `Merging` -> combining multiple veNFTs with the most recent lock taking precedence. The use case here would be a user with multiple locks reaching the max duration, wishing to consolidate positions.
 
-## Consequences for escrow logic
+# Consequences for escrow logic
 
-### Merging and Splitting
+This section explores some of the wider changes we would need to make inside particularly the `VotingEscrow.sol` contracts to accomodate increasing voting power.
+
+A few things jump to mind as 'not relevant' in the increasing case:
+
+1. Permanent locks - if a curve is increasing in voting power, there is no benefit to auto-renewal.
+2. Increasing amount - this cannot be done without resetting the lock
+3. Increasing duration - this cannot be done as there is no duration
+4. `endDate` in the LockedBalance needs to be replaced with `createdDate` in order to track properly
+5. `dslope` changes happen not at unlock time, but instead after `duration`
+6. Creating a lock should not allow a `maxDuration`
+7. Withdrawals can be done immediately or subject to a withdrawal queue
+
+## Generalising
+
+Bad abstractions kill, and trying to do too much by combining increasing and decreasing curves is likely a bad idea.
+
+We should start by simply defining an IncreasingLockEscrow, designed to be used with an increasing lock curve. If we find elegant abstractions along the way - excellent.
+
+## Merging and Splitting
