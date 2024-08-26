@@ -1,4 +1,8 @@
-# Increasing voting power
+# Generalised approaches to non-linear curves
+
+In this section we look at the case where we want a curve where voting power is _increasing_ in t. We first look at the changes needed then ask the question: can this be generalised so we have a single formula for increasing and decreasing curves?
+
+## Part 1: Increasing voting power
 
 Increasing voting power refers to the scenario where a user's voting power gets larger, the longer the user is staked.
 
@@ -124,9 +128,9 @@ uNew.slope = _newLocked.amount / (ProtocolTimeLibraryV2.iMAXTIME / 2);
 
 We then need to adjust our bounding function to reflect that the new maximum is `2 * amount`
 
-You can certainly do this, but it's not especially intuitive what's going on.
+You can certainly do this, but it's not especially intuitive what's going on. Let's think if we can generalise the formula a bit
 
-### Formally defining the curve
+## Part 2: A Formally definition of our linear curve
 
 We need a formula for our curve that actually encompasses the correct variables. Consider a standard line as $`y = mx + c`$
 
