@@ -1,6 +1,4 @@
-# Understanding Checkpoints in veGovernance
-
-# Table of Contents
+# VE Explainer
 
 - [Understanding Checkpoints in veGovernance](#understanding-checkpoints-in-vegovernance)
   - [Intro](#intro)
@@ -334,47 +332,3 @@ We can define other curves:
 
 1. [Generalised linear curves (increasing and decreasing)](./GENERALISED_LINEAR.md)
 2. [Non linear curves](./NONLINEAR.md)
-
-# extracting curves to separate modules
-
-A generalized escrow contract needs to allow for different curve system. In the Aerodrome implementation, all logic lives inside `VotingEscrow.sol`. What we want is the following architecture:
-
-![image](https://github.com/user-attachments/assets/9824a33d-f9b5-4378-9780-c8381947c591)
-
-What we want is that the curve logic, including the checkpointing state, is safely encapsulated into a single Escrow Curve contract, which is both parameterized for different curve types, and swappable depending on what implentation someone wants. The example curve types include:
-
-- Linear decreasing (default), used in Aerodrome, Velodrome, Curve etc.
-
-  - Vote decreases linearly over time
-  - Parameters:
-    - MAX_LOCK
-    - MIN_LOCK
-    - Epoch Length
-
-- Linear increasing: TBC
-
-  - Vote increases linearly over time
-  - Parameters:
-    - MAX_INCREASE
-    - MIN_LOCK
-    - epoch length
-
-- Non-linear Increasing:
-  - No totalSupply
-
-We first look at the extraction process.
-
-## IEscrowCurve
-
-Smart contracts work especially well in a Service Oriented Architecture (SOA) due to the EVM being a global, standardised runtime. This is a fancy way of saying: "we can split things up quite nicely".
-
-Our plan here is to move the relevant state involved in the escrow curve calculations _out_ of the main `VotingEscrow.sol` contract. This includes:
-
-- Checkpointing logic, in particular the internal checkpoint function
-- Structs concerning Global and User points
-- Mappings storing historical points
-- Epochs (TODO: ??????)
-
-We note also that the `BalanceLogicLibrary` from Aerodrome is convenient to inline into the curve, for the simple reason that the library is effectively achieving the same goal of logic abstraction, albeit while writing to the state of the calling contract.
-
-We instead create an entirely separate state. This does introduce some runtime overhead due to using the `CALL` opcode, but it means that different curves can be defined.
