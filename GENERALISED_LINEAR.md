@@ -290,7 +290,7 @@ We saw above that, in order to calculate a bounded maximum voting power multiple
 
 Therefore, it may make sense for us to simply create 1 NFT per lock and not allow modifications.
 
-In this case, our `balanceOfNFTAt` could be more easily written with simply the lock created date + the elapsed time.
+In this case, `balanceOfNFTAt` could be more easily written with simply the lock created date + the elapsed time.
 
 Our UserPoints could then be safely deprecated (although we will still need `dslopes` as will be explained below). This mostly means we can save a few storage writes by writing to userPointHistory and userPointEpoch. We still need to write to global points.
 
@@ -298,7 +298,7 @@ Note that we may, wish to allow `Merging` -> combining multiple veNFTs with the 
 
 # Consequences for escrow logic
 
-This section explores some of the wider changes we would need to make inside particularly the `VotingEscrow.sol` contracts to accomodate increasing voting power.
+This section explores some of the wider changes that would need to be made to contracts to accomodate increasing voting power.
 
 A few things jump to mind as 'not relevant' in the increasing case:
 
@@ -309,11 +309,3 @@ A few things jump to mind as 'not relevant' in the increasing case:
 5. `dslope` changes happen not at unlock time, but instead after `duration`
 6. Creating a lock should not allow a `maxDuration`
 7. Withdrawals can be done immediately or subject to a withdrawal queue
-
-## Generalising
-
-Bad abstractions kill, and trying to do too much by combining increasing and decreasing curves is likely a bad idea.
-
-We should start by simply defining an IncreasingLockEscrow, designed to be used with an increasing lock curve. If we find elegant abstractions along the way - excellent.
-
-## Merging and Splitting
