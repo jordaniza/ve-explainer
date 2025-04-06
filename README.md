@@ -35,7 +35,7 @@ In many veToken implementations, dynamic token balances are computed based on st
 
 Before jumping into the logic it's worth grabbing some further context about Aerodrome and how it works.
 
-Aerodrome is a popular DeFi protocol that is heavily inspired by Curve finance. Users can lock $AERO tokens for periods of up to 4 years and in return receive voting power in the Aerodrome protocol.
+Aerodrome is a popular DeFi protocol, forked from Solidly which in turn drew heavy inspiration from Curve Finance. Users can lock $AERO tokens for periods of up to 4 years and in return receive voting power in the Aerodrome protocol.
 
 Voters in Aerodrome can direct future $AERO emissions by allocating their vote weight across _gauges_. A gauge in Aerodrome typically points to a particular liqudity pool (such as WETH-USDC). Users who provide liquidity in such a pool receive standard Liqudity pool fees + emissions dictated by the % of votes that pool/gauge receives.
 
@@ -64,16 +64,22 @@ As the end date of your lock approaches, your voting power decreases. This can b
 
 ## Fetching Historic Voting Power
 
-In most voting systems, it's important to have snapshots of a user's voting power at a point in time. This helps prevent scenarios where users purchase (or borrow) large amounts of voting power _after_ a particularly significant vote begins. Even in a ve system, where tokens are typically non-transferrable for the duration of the lock, it's important that users cannot backrun voting.
-
-Consequently, we need a function to fetch the historical voting power of a user at given point in time.
+At any given moment then, a user may hold a veNFT with some voting power. We need a way to model the dynamic voting power on chain.
 
 In Aerodrome, this function exists and is called `balanceOfNFTAt`.
 
 We might think of a simple way to implement it:
 
 ```solidity
-/// Not real code: this is just an example
+/// UNAUDITED CODE: do not use in production
+// define a simple data structure to collect veNFT data
+struct Lock {
+    uint256 amount;
+    uint256 endDate;
+}
+mapping(uint256 tokenId => Lock) locks;
+
+// an example function for fetching the balance of a veNFT identified by _tokenId
 function balanceOfNFTAt(
   uint256 _tokenId,
   uint256 timestamp
@@ -91,7 +97,7 @@ function balanceOfNFTAt(
 
 The above is nice and simple and easy to understand: To find the user's voting power, we simply grab the amount locked and their end date, and evaulate the curve at the passed timestamp.
 
-The challenge here then becomes: what to do if a user wants to _change their lock_?
+The challenge here then becomes: **what to do if a user wants to _change their lock_?**
 
 By changing a lock we typically mean 1 of the following options:
 
@@ -161,17 +167,13 @@ So we _could_ define a struct `UserPoint` with fields `amount`, `endDate` and `t
 For a given timestamp `t` in the past, we would then find the nearest `UserPoint` _before_ `t`, and then recompute the voting power using the formula we used to calculate Alice's balance, above.
 
 ```solidity
-
+/// UNAUDITED CODE: do not use in production
 struct UserPoint {
     uint256 amount;
     uint256 endDate;
     uint256 timestamp;
 }
-
-// store historic user checkpoints
-// we don't yet show checkpointing logic but you get the idea
 mapping (uint256 timestamp => UserPoint) userPointHistory;
-
 
 function balanceOfNftAt(uint256 _tokenId, uint256 t) public view returns (uint256 votingPower) {
     // find the nearest user point before time t - we will come back to this part
@@ -240,6 +242,150 @@ And our evaluation of a user's historical voting power at `timestamp` is:
 ```solidity
 UserPoint memory lastPoint = getUserPointBefore(_tokenId, timestamp);
 votingPower = lastPoint.bias lastPoint.slope * (timestamp - lastPoint.timestamp);
+```
+
+## The full balance function
+
+We now have most of the conceptual pieces to understand the full balance querying function used inside Aerodrome, let's first take a look at it, then evaluate line by line.
+
+```solidity
+    function balanceOfNFTAt(
+        mapping(uint256 => uint256) storage _userPointEpoch,
+        mapping(uint256 => IVotingEscrow.UserPoint[1000000000]) storage _userPointHistory,
+        uint256 _tokenId,
+        uint256 _t
+    ) external view returns (uint256) {
+        uint256 _epoch = getPastUserPointIndex(_userPointEpoch, _userPointHistory, _tokenId, _t);
+        // epoch 0 is an empty point
+        if (_epoch == 0) return 0;
+        IVotingEscrow.UserPoint memory lastPoint = _userPointHistory[_tokenId][_epoch];
+        if (lastPoint.permanent != 0) {
+            return lastPoint.permanent;
+        } else {
+            lastPoint.bias -= lastPoint.slope * (_t - lastPoint.ts).toInt128();
+            if (lastPoint.bias < 0) {
+                lastPoint.bias = 0;
+            }
+            return lastPoint.bias.toUint256();
+        }
+    }
+
+    function getPastUserPointIndex(
+        mapping(uint256 => uint256) storage _userPointEpoch,
+        mapping(uint256 => IVotingEscrow.UserPoint[1000000000]) storage _userPointHistory,
+        uint256 _tokenId,
+        uint256 _timestamp
+    ) internal view returns (uint256) {
+        uint256 _userEpoch = _userPointEpoch[_tokenId];
+        if (_userEpoch == 0) return 0;
+        // First check most recent balance
+        if (_userPointHistory[_tokenId][_userEpoch].ts <= _timestamp) return (_userEpoch);
+        // Next check implicit zero balance
+        if (_userPointHistory[_tokenId][1].ts > _timestamp) return 0;
+
+        uint256 lower = 0;
+        uint256 upper = _userEpoch;
+        while (upper > lower) {
+            uint256 center = upper - (upper - lower) / 2; // ceil, avoiding overflow
+            IVotingEscrow.UserPoint storage userPoint = _userPointHistory[_tokenId][center];
+            if (userPoint.ts == _timestamp) {
+                return center;
+            } else if (userPoint.ts < _timestamp) {
+                lower = center;
+            } else {
+                upper = center - 1;
+            }
+        }
+        return lower;
+    }
+```
+
+### Arguments
+
+Let's start with the variables passed to the function.
+
+```solidity
+        mapping(uint256 => uint256) storage _userPointEpoch,
+        mapping(uint256 => IVotingEscrow.UserPoint[1000000000]) storage _userPointHistory,
+        uint256 _tokenId,
+        uint256 _t
+```
+
+In Aerodrome, the balanceOfNFTAt function is defined inside a library known as BalanceLogicLibrary. This allows us to use storage mappings as arguments in the library, which can then be passed to the balance function.
+
+We have 2 such mappings: `userPointEpoch` and `userPointHistory`. Respectively these are used to track the length of the array and to store our user points.
+
+> Why not use `UserPoint[]`? This is likely a carryover from the original [Vyper Implementation](https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L95). Vyper introduced the DynArray type in 0.3.2, after the Curve contracts were written.
+
+We also need the veNFT ID (`_tokenId`) and the timestamp `_t` to query the balance at.
+
+### Binary search to find the nearest epoch
+
+Our first line fetches the "epoch" of the UserPoint, where epochs are incrementally written with a strictly increasing timestamp. This results in an array sorted by timestamp.
+
+When we pass a timestamp, we want to find the point **before or at that timestamp**. We achieve this via the `getPastUserPointIndex` function. This returns the index in the UserPoint array of the point that we want.
+
+Note that:
+
+- User Epochs are written at 1
+- If userEpoch = 0, that means we have no data for that tokenId
+
+This function does 2 things:
+
+**Step 1: check for early return cases**
+
+Before we commit to the binary search, we check some simple cases to save gas, specifically:
+
+```solidity
+        /// get the current epoch (effectively the array length)
+        uint256 _userEpoch = _userPointEpoch[_tokenId];
+
+        /// if no data, return an index of zero
+        if (_userEpoch == 0) return 0;
+
+        /// if the most recent value is in the past, skip binary search and just use the latest value
+        if (_userPointHistory[_tokenId][_userEpoch].ts <= _timestamp) return (_userEpoch);
+
+        /// user epochs for actual data start at 1. Hence if the ts of that user point is in the future, the user had no voting power at that point.
+        /// this would be the case if one queried before a user's first lock with that tokenId
+        if (_userPointHistory[_tokenId][1].ts > _timestamp) return 0;
+
+```
+
+**Step 2: Perform binary search**
+
+Explaining binary search in depth is beyond the scope of this article, but suffice to say that, for an arbitrary timestamp `t`, Binary search allows us to query a sorted array in O(log N) time complexity.
+
+Thus, for users with frequent updates to their lock, we have an efficient way to retrieve the index of the UserPoint we need.
+
+### Retrieving our voting power
+
+Now we have the nearest epoch at or before an arbitray timestamp, we can compute the voting power.
+
+```solidity
+        /// epochs with data will begin at 1, so if no data at that point, return 0 for voting power
+        if (_epoch == 0) return 0;
+
+        /// otherwise used the fetched id to grab the point from storage
+        IVotingEscrow.UserPoint memory lastPoint = _userPointHistory[_tokenId][_epoch];
+
+        /// Aerodrome allows for veNFTs that set a "permanent" lock that does not decay.
+        /// we do not cover this case in this post but it's here for completeness
+        if (lastPoint.permanent != 0) {
+            return lastPoint.permanent;
+
+        /// this is our balanceOfNFT calcuation from earlier. We take the original bias loaded from the point
+        /// then compute how much voting power has been lost due to time decay since that point was written
+        /// In other words this is:
+        /// (starting voting power at lastPoint.ts) - (rate of change per second) * (seconds since lastPoint.ts)
+        } else {
+            lastPoint.bias -= lastPoint.slope * (_t - lastPoint.ts).toInt128();
+            /// in the event that someone holds a lock for a long time their voting power might go negative - we dont allow this so bound voting power at 0
+            if (lastPoint.bias < 0) {
+                lastPoint.bias = 0;
+            }
+            return lastPoint.bias.toUint256();
+        }
 ```
 
 ## Global Checkpoints & Total Supply
@@ -323,8 +469,6 @@ mapping(uint256 => int128) public slopeChanges;
 ## TODO
 
 ## Writing checkpoints
-
-## Reading via binary search
 
 # Other Curves
 
