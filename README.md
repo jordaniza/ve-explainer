@@ -439,9 +439,9 @@ You can see an example of the global curve vs. the user curve in the chart below
 
 The important point here is that we have all the information to build the _global_ curve if we adjust it when setting every _user_ curve.
 
-You should now be asking: what about that last part?
+There is one final piece missing though: don't we need to **remove** a user's voting power once they've hit zero?
 
-The final 2 years after User A's stake unlocks changes the shape of the curve, and this doesn't appear to be stored anywhere in `slope` or `bias`.
+Specifically, in the final 2 years after User A's stake unlocks, we expect to remove their voting power from the total voting power curve. Unfortunately, this doesn't appear to be stored anywhere in `slope` or `bias`.
 
 This is entirely correct, and constitutes one of the more tricky parts of building out a global supply - how do we "schedule" changes to the slope _in the future_.
 
@@ -454,7 +454,84 @@ What we need to do, is have a way to log, at the point of deposit:
 
 Fortunately for us, we know all the above information - we store the `endDate` inside the `LockedBalance`, and we know the slope of the user's decay curve from `UserPoint`.
 
-What this means is that we can store a list of `slopeChanges`: times in the future when we need to _decrease_ the global `slope`, by removing the user's `slope`.
+What this means is that we can store a list of `slopeChanges`: times in the future when we need to _decrease_ the global `slope`, by removing the user's `slope`. Put another way, slope changes represent when the global voting power curve should get **shallower**, because a particular tokenId has no voting power left, and so is no longer decreasing.
+
+That's the high level overview anyway, at this point we can start reviewing the full checkpointing implementation to see how it is achieved in practice.
+
+## The full checkpointing function
+
+[The full checkpoint function inside Aerodrome](https://github.com/mtfuji25/aerodome-contracts/blob/77015d18d333ef553546e4570c19b89043311cc6/contracts/VotingEscrow.sol#L591) is a large, 150+ line function. While it may look intimidating, we have all the building blocks we need to understand it.
+
+We can break the function up into the following parts:
+
+1. Initialize Variables
+1. Computing the user point
+1. Backfilling total supply
+1. Adding the user point to the global point
+1. Adjusting dslopes
+1. Writing the user point
+
+### Arguments
+
+Let's first take a look at the arguments to the function:
+
+```solidity
+function _checkpoint(uint256 _tokenId, LockedBalance memory _oldLocked, LockedBalance memory _newLocked)
+```
+
+Checkpointing takes the veNFT ID (\_tokenId), and a pair of LockedBalance structs representing the previous lock data and the updated lock data.
+
+Our job is to update the UserPoint and GlobalPoint's associated with this \_tokenId based on the difference between \_oldLocked and \_newLocked.
+
+Our first step draws heavily upon the logic we've seen up to now. Our aim here is to compute the bias and slope to store on the UserPoint. Let's first look at the full code:
+
+```solidity
+        UserPoint memory uOld;
+        UserPoint memory uNew;
+        int128 oldDslope = 0;
+        int128 newDslope = 0;
+        uint256 _epoch = epoch;
+
+        if (_tokenId != 0) {
+            uNew.permanent = _newLocked.isPermanent ? _newLocked.amount.toUint256() : 0;
+            // Calculate slopes and biases
+            // Kept at zero when they have to
+            if (_oldLocked.end > block.timestamp && _oldLocked.amount > 0) {
+                uOld.slope = _oldLocked.amount / iMAXTIME;
+                uOld.bias = uOld.slope * (_oldLocked.end - block.timestamp).toInt128();
+            }
+            if (_newLocked.end > block.timestamp && _newLocked.amount > 0) {
+                uNew.slope = _newLocked.amount / iMAXTIME;
+                uNew.bias = uNew.slope * (_newLocked.end - block.timestamp).toInt128();
+            }
+
+            // Read values of scheduled changes in the slope
+            // _oldLocked.end can be in the past and in the future
+            // _newLocked.end can ONLY by in the FUTURE unless everything expired: than zeros
+            oldDslope = slopeChanges[_oldLocked.end];
+            if (_newLocked.end != 0) {
+                if (_newLocked.end == _oldLocked.end) {
+                    newDslope = oldDslope;
+                } else {
+                    newDslope = slopeChanges[_newLocked.end];
+                }
+            }
+        }
+```
+
+### Initializing Variables
+
+First, we initialize our variables.
+
+```solidity
+        UserPoint memory uOld;
+        UserPoint memory uNew;
+        int128 oldDslope = 0;
+        int128 newDslope = 0;
+        uint256 _epoch = epoch;
+```
+
+Our UserPoints and slopeChanges (called dslopes) are initialized with default values. We will come back to epoch but we need to first talk about slope changes...
 
 Every time we create or alter a lock, we store a value `dslope` (change in slope) that will be scheduled at a point in time. We store this in a mapping:
 
@@ -466,13 +543,250 @@ mapping(uint256 => int128) public slopeChanges;
 
 > `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analgous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
 
-## TODO
+So in our code above, we initialize the slope changes to zero before beginning our first code block.
 
-## Writing checkpoints
+### Computing voting power
 
-# Other Curves
+```solidity
+        if (_tokenId != 0) {
+            uNew.permanent = _newLocked.isPermanent ? _newLocked.amount.toUint256() : 0;
+            // Calculate slopes and biases
+            // Kept at zero when they have to
+            if (_oldLocked.end > block.timestamp && _oldLocked.amount > 0) {
+                uOld.slope = _oldLocked.amount / iMAXTIME;
+                uOld.bias = uOld.slope * (_oldLocked.end - block.timestamp).toInt128();
+            }
+            if (_newLocked.end > block.timestamp && _newLocked.amount > 0) {
+                uNew.slope = _newLocked.amount / iMAXTIME;
+                uNew.bias = uNew.slope * (_newLocked.end - block.timestamp).toInt128();
+            }
+```
 
-We can define other curves:
+Assuming a tokenId is passed (0 being a manual checkpoint), then we need to update the new and the old user point.
 
-1. [Generalised linear curves (increasing and decreasing)](./GENERALISED_LINEAR.md)
-2. [Non linear curves](./NONLINEAR.md)
+The code itself is duplicated for new and old but is gated by a condition:
+
+```solidity
+if (_oldLocked.end > block.timestamp && _oldLocked.amount > 0) {
+```
+
+Which simply checks that the lock is not expired nor empty. It's consequently entirely possible to pass a zero value lock to the checkpoint function, perhaps during an exit, in which case there is no bias nor slope to compute.
+
+The body of the function should be obvious if you've been following along up until now. We compute the slope and bias based on the elapsed time since the last lock, and the amount in the lock.
+
+Next we fetch our slope changes. These changes are batched together for all users at the locked.end - we can see this elsewhere in the codebase in the `createLock` function:
+
+```solidity
+    function _createLock(uint256 _value, uint256 _lockDuration, address _to) internal returns (uint256) {
+        uint256 unlockTime = ((block.timestamp + _lockDuration) / WEEK) * WEEK; // Locktime is rounded down to weeks
+```
+
+Because all locks are created with end dates rounded to a weekly interval, all `slopeChanges` will be batched on weekly intervals. We will see the importance of this later on.
+
+At any rate we fetch the old slope changes (oldDslope) and check if the lock end dates have changed, if not, we simply set the newDslope to the old, else we load the newDslope variable from the new end date, as seen below:
+
+```solidity
+        oldDslope = slopeChanges[_oldLocked.end];
+            if (_newLocked.end != 0) {
+                if (_newLocked.end == _oldLocked.end) {
+                    newDslope = oldDslope;
+                } else {
+                    newDslope = slopeChanges[_newLocked.end];
+                }
+            }
+```
+
+### Backfilling Total Supply
+
+Having computed, but not yet written, our UserPoint, we move on to GlobalPoints. GlobalPoints reuse many of the same concepts as we see in UserPoints, where array-like behaviour is achieved via an epoch variable to store the index of the GlobalPoints, and the points themselves are stored in a mapping and orderd by timestamp to allow for efficient binary searching:
+
+```solidity
+mapping(uint256 => GlobalPoint) internal _pointHistory; // epoch -> unsigned global point
+
+/// ...
+
+uint256 public epoch;
+```
+
+We initialize our GlobalPoint into memory by checking if we have an epoch > 0, we then enter this for loop:
+
+```solidity
+        // Go over weeks to fill history and calculate what the current point is
+        {
+            uint256 t_i = (lastCheckpoint / WEEK) * WEEK;
+            for (uint256 i = 0; i < 255; ++i) {
+                // Hopefully it won't happen that this won't get used in 5 years!
+                // If it does, users will be able to withdraw but vote weight will be broken
+                t_i += WEEK; // Initial value of t_i is always larger than the ts of the last point
+                int128 d_slope = 0;
+                if (t_i > block.timestamp) {
+                    t_i = block.timestamp;
+                } else {
+                    d_slope = slopeChanges[t_i];
+                }
+                lastPoint.bias -= lastPoint.slope * (t_i - lastCheckpoint).toInt128();
+                lastPoint.slope += d_slope;
+                if (lastPoint.bias < 0) {
+                    // This can happen
+                    lastPoint.bias = 0;
+                }
+                if (lastPoint.slope < 0) {
+                    // This cannot happen - just in case
+                    lastPoint.slope = 0;
+                }
+                lastCheckpoint = t_i;
+                lastPoint.ts = t_i;
+                lastPoint.blk = initialLastPoint.blk + (blockSlope * (t_i - initialLastPoint.ts)) / MULTIPLIER;
+                _epoch += 1;
+                if (t_i == block.timestamp) {
+                    lastPoint.blk = block.number;
+                    break;
+                } else {
+                    _pointHistory[_epoch] = lastPoint;
+                }
+            }
+        }
+```
+
+This loop is _critical_ to understanding how we track total supply in a dynamic system on chain.
+
+First, we set an initial value for a timestamp, t_i, that will be used to iterate over periods between our last checkpoint and now:
+
+```solidity
+uint256 t_i = (lastCheckpoint / WEEK) * WEEK;
+```
+
+In the event that the last checkpoint was written mid week, integer math is used to round t_i to the start of a given week.
+
+We then enter a for loop of up to 255 iterations. t_i is incremegted by a week each loop, including at the start - this crucially prevents us writing out of order GlobalPoints in the event that the most recent point was ahead of the floored initial t_i value.
+
+```solidity
+  for (uint256 i = 0; i < 255; ++i) {
+    // Hopefully it won't happen that this won't get used in 5 years!
+    // If it does, users will be able to withdraw but vote weight will be broken
+    t_i += WEEK; // Initial value of t_i is always larger than the ts of the last point
+```
+
+Next we bound t_i to the present moment - ensuring even if we add a week we dont 'overshoot' and write to the future.
+
+We fetch the current set of slope changes that are at the value of t_i, remembering that, as these are batched by week, d_slope will only have a value if we are exactly on a week boundary.
+
+There are therefore 2 crucial states we can be in when fetching t_i:
+
+1. t_i can be exactly on a week boundary
+2. t_i can be in between a week boundary
+
+As a new GlobalPoint is written with every new deposit, then with a frequently used contract such as Aerodrome's VotingEscrow, most of the time, t_i will be a single write at block.timestamp. Indeed, every time `_checkpoint` is called, at least one write (the final write) will be where t_i = block.timestamp.
+
+The power of this function however, is that if between the last point being written and now, we crossed a weekly interval, t_i will be able to fetch a value of d_slope from slopeChanges.
+
+```solidity
+    int128 d_slope = 0;
+    if (t_i > block.timestamp) {
+        t_i = block.timestamp;
+    } else {
+        d_slope = slopeChanges[t_i];
+    }
+```
+
+Next we compute the values of the lastPoint / the GlobalPoint. This is similar to the user point but note how we INCREASE the slope for the NEXT iteration using the slope changes. Again, what we're saying here is that at crucial t_i values, a number of locks will have expired, and cease to have voting power that can be reduced. Hence, make the slope shallower.
+
+```solidity
+    lastPoint.bias -= lastPoint.slope * (t_i - lastCheckpoint).toInt128();
+    lastPoint.slope += d_slope;
+    if (lastPoint.bias < 0) {
+        // This can happen
+        lastPoint.bias = 0;
+    }
+    if (lastPoint.slope < 0) {
+        // This cannot happen - just in case
+        lastPoint.slope = 0;
+    }
+    lastCheckpoint = t_i;
+    lastPoint.ts = t_i;
+
+```
+
+Finally, we conclude our loop, we incremenent our epoch/the global point index in memory and write a new point if we are not at the present yet, else we need to write some more data before we can finish.
+
+```solidity
+    _epoch += 1;
+    if (t_i == block.timestamp) {
+        break;
+    } else {
+        _pointHistory[_epoch] = lastPoint;
+    }
+```
+
+### Updating Slope Changes
+
+If you've followed this far, most of the rest of the function should be fairly self explanatory. I do want to highlight one section though and that is the adjustment of slope changes.
+
+```solidity
+    // Schedule the slope changes (slope is going down)
+    // We subtract new_user_slope from [_newLocked.end]
+    // and add old_user_slope to [_oldLocked.end]
+    if (_oldLocked.end > block.timestamp) {
+        // oldDslope was <something> - uOld.slope, so we cancel that
+        oldDslope += uOld.slope;
+        if (_newLocked.end == _oldLocked.end) {
+            oldDslope -= uNew.slope; // It was a new deposit, not extension
+        }
+        slopeChanges[_oldLocked.end] = oldDslope;
+    }
+
+    if (_newLocked.end > block.timestamp) {
+        // update slope if new lock is greater than old lock and is not permanent or if old lock is permanent
+        if ((_newLocked.end > _oldLocked.end)) {
+            newDslope -= uNew.slope; // old slope disappeared at this point
+            slopeChanges[_newLocked.end] = newDslope;
+        }
+        // else: we recorded it already in oldDslope
+    }
+```
+
+In the event that a user changes her lock, we need to make adjustments to the slopeChanges to account for this.
+
+We primarily care about 3 things regarding slope changes:
+
+1. Has the old lock already ended?
+2. Has the new lock already ended?
+3. Has the lock date changed between the old and new lock?
+
+In the first case, if the old lock has already ended, there is nothing to adjust on slopeChanges, for the OLD lock (the slope change has already occured).
+
+Else, we run the following code:
+
+```solidity
+    if (_oldLocked.end > block.timestamp) {
+        // oldDslope was <something> - uOld.slope, so we cancel that
+        oldDslope += uOld.slope;
+        if (_newLocked.end == _oldLocked.end) {
+            oldDslope -= uNew.slope; // It was a new deposit, not extension
+        }
+        slopeChanges[_oldLocked.end] = oldDslope;
+    }
+```
+
+As you can see from the comment, the oldDslope needs the old lock slope removed from it, and replaced by the new lock slope. In the event that the lock dates have not changed (the user is increasing her deposit but not changing the exit), this means we can overwrite the oldDslope value at oldLocked.end - else we need to write the changes to a new location in slopeChanges.
+
+In this case we run the following code:
+
+```solidity
+    if (_newLocked.end > block.timestamp) {
+        // update slope if new lock is greater than old lock and is not permanent or if old lock is permanent
+        if ((_newLocked.end > _oldLocked.end)) {
+            newDslope -= uNew.slope; // old slope disappeared at this point
+            slopeChanges[_newLocked.end] = newDslope;
+        }
+        // else: we recorded it already in oldDslope
+    }
+```
+
+Similar to the above if the lock has expired, no need to write to slope changes. If the new lock has the same end date, we already wrote changes to the oldDslope above. Else we update the newDslope value at the new end date.
+
+## Conclusion
+
+While that is not a completely exhaustive walkthrough of the whole Aerodrome codebase, I hope that covers one of the more conceptually tricky parts, and gives some understanding as to the intuition and mechanisms at play.
+
+If you're interested in discussing more about veTokenomics, feel free to message me. Alternatively, Aragon specialises in deploying customizable, turnkey solutions for projects looking to leverage advanced tokenomic models like the above.
