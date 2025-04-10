@@ -456,6 +456,9 @@ Fortunately for us, we know all the above information - we store the `endDate` i
 
 What this means is that we can store a list of `slopeChanges`: times in the future when we need to _decrease_ the global `slope`, by removing the user's `slope`. Put another way, slope changes represent when the global voting power curve should get **shallower**, because a particular tokenId has no voting power left, and so is no longer decreasing.
 
+![image](https://github.com/user-attachments/assets/64900788-6ed9-4f8f-991d-555f651f1698)
+
+
 That's the high level overview anyway, at this point we can start reviewing the full checkpointing implementation to see how it is achieved in practice.
 
 ## The full checkpointing function
