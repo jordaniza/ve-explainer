@@ -8,20 +8,18 @@
   - [Solving our historical balances for the user](#solving-our-historical-balances-for-the-user)
   - [Checkpoints: Approach 1](#checkpoints-approach-1)
   - [Checkpoints: Another way](#checkpoints-another-way)
+  - [The full balance function](#the-full-balance-function)
   - [Global Checkpoints & Total Supply](#global-checkpoints--total-supply)
     - [Solution: a series of changes](#solution-a-series-of-changes)
     - [Scheduled curve changes and `dslope`](#scheduled-curve-changes-and-dslope)
-    - [Advanced: Computing Total Supply for Higher Order Polynomials](#advanced-computing-total-supply-for-higher-order-polynomials)
-  - [TODO](#todo)
-    - [Writing checkpoints](#writing-checkpoints)
-    - [Reading via binary search](#reading-via-binary-search)
-    - [Other Curves](#other-curves)
-      - [Increasing voting power](#increasing-voting-power)
-      - [Nonlinear curves](#nonlinear-curves)
-        - [Do you need total supply?](#do-you-need-total-supply)
-        - [Linear approximations](#linear-approximations)
-- [Extracting curves to separate modules](#extracting-curves-to-separate-modules)
-  - [IEscrowCurve](#iescrowcurve)
+  - [The full checkpointing function](#the-full-checkpointing-function)
+    - [Arguments](#arguments)
+    - [Initializing Variables](#initializing-variables)
+    - [Computing voting power](#computing-voting-power)
+    - [Backfilling Total Supply](#backfilling-total-supply)
+    - [Updating Slope Changes](#updating-slope-changes)
+- [Conclusion](#conclusion)
+
 
 ## Intro
 
@@ -37,7 +35,7 @@ Before jumping into the logic it's worth grabbing some further context about Aer
 
 Aerodrome is a popular DeFi protocol, forked from Solidly which in turn drew heavy inspiration from Curve Finance. Users can lock $AERO tokens for periods of up to 4 years and in return receive voting power in the Aerodrome protocol.
 
-Voters in Aerodrome can direct future $AERO emissions by allocating their vote weight across _gauges_. A gauge in Aerodrome typically points to a particular liqudity pool (such as WETH-USDC). Users who provide liquidity in such a pool receive standard Liqudity pool fees + emissions dictated by the % of votes that pool/gauge receives.
+Voters in Aerodrome can direct future $AERO emissions by allocating their vote weight across _gauges_. A gauge in Aerodrome typically points to a particular liquidity pool (such as WETH-USDC). Users who provide liquidity in such a pool receive standard liquidity pool fees + emissions dictated by the % of votes that pool/gauge receives.
 
 As an example: 100 $AERO are being distributed as incentives.
 
@@ -95,7 +93,7 @@ function balanceOfNFTAt(
 }
 ```
 
-The above is nice and simple and easy to understand: To find the user's voting power, we simply grab the amount locked and their end date, and evaulate the curve at the passed timestamp.
+The above is nice and simple and easy to understand: To find the user's voting power, we simply grab the amount locked and their end date, and evauluate the curve at the passed timestamp.
 
 The challenge here then becomes: **what to do if a user wants to _change their lock_?**
 
@@ -544,7 +542,7 @@ Every time we create or alter a lock, we store a value `dslope` (change in slope
 mapping(uint256 => int128) public slopeChanges;
 ```
 
-> `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analgous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
+> `dslope` follows conventions from calculus where you might see $`\frac{dSlope}{dt}`$ aka: the rate of change of the slope over time. It might be helpful to think of `dslope` as a analogous to a second derivative - `slope` is already a measure of how fast voting power decays, and so you can think of `dslope` as something like $`\frac{d^2VotingPower}{dt^2}`$. What's interesting here is that, by scheduling slope changes into discrete intervals, the Global curve avoids having an actual second derivative above zero, which makes things a lot easier for us.
 
 So in our code above, we initialize the slope changes to zero before beginning our first code block.
 
@@ -573,7 +571,7 @@ The code itself is duplicated for new and old but is gated by a condition:
 if (_oldLocked.end > block.timestamp && _oldLocked.amount > 0) {
 ```
 
-Which simply checks that the lock is not expired nor empty. It's consequently entirely possible to pass a zero value lock to the checkpoint function, perhaps during an exit, in which case there is no bias nor slope to compute.
+Which simply checks that the lock is not expired nor empty. It's therefore entirely possible to pass a zero value lock to the checkpoint function, perhaps during an exit, in which case there is no bias nor slope to compute.
 
 The body of the function should be obvious if you've been following along up until now. We compute the slope and bias based on the elapsed time since the last lock, and the amount in the lock.
 
@@ -661,7 +659,7 @@ uint256 t_i = (lastCheckpoint / WEEK) * WEEK;
 
 In the event that the last checkpoint was written mid week, integer math is used to round t_i to the start of a given week.
 
-We then enter a for loop of up to 255 iterations. t_i is incremegted by a week each loop, including at the start - this crucially prevents us writing out of order GlobalPoints in the event that the most recent point was ahead of the floored initial t_i value.
+We then enter a for loop of up to 255 iterations. t_i is incremented by a week each loop, including at the start - this crucially prevents us writing out of order GlobalPoints in the event that the most recent point was ahead of the floored initial t_i value.
 
 ```solidity
   for (uint256 i = 0; i < 255; ++i) {
