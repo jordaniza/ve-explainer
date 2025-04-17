@@ -357,7 +357,7 @@ Thus, for users with frequent updates to their lock, we have an efficient way to
 
 ### Retrieving our voting power
 
-Now we have the nearest epoch at or before an arbitray timestamp, we can compute the voting power.
+Now we have the nearest epoch at or before an arbitrary timestamp, we can compute the voting power.
 
 ```solidity
         /// epochs with data will begin at 1, so if no data at that point, return 0 for voting power
@@ -788,4 +788,4 @@ Similar to the above if the lock has expired, no need to write to slope changes.
 
 While that is not a completely exhaustive walkthrough of the whole Aerodrome codebase, I hope that covers one of the more conceptually tricky parts, and gives some understanding as to the intuition and mechanisms at play.
 
-If you're interested in discussing more about veTokenomics, feel free to message me. Alternatively, Aragon specialises in deploying customizable, turnkey solutions for projects looking to leverage advanced tokenomic models like the above.
+If you're interested in discussing more about veTokenomics, feel free to [message me on telegram](https://t.me/jordaniza). Alternatively, Aragon specialises in deploying customizable, turnkey solutions for projects looking to leverage advanced tokenomic models like the above - [drop us a message and we will be happy to discuss](https://www.aragon.org/tokenomics).
