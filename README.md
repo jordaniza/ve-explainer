@@ -20,7 +20,6 @@
     - [Updating Slope Changes](#updating-slope-changes)
 - [Conclusion](#conclusion)
 
-
 ## Intro
 
 Vote-Escrowed Tokens ("veTokens") represent a form of token design where token holders must lock/stake governance tokens for periods of time in order to vote in a Decentralized Autonomous Organization ("DAO").
@@ -33,7 +32,7 @@ In many veToken implementations, dynamic token balances are computed based on st
 
 Before jumping into the logic it's worth grabbing some further context about Aerodrome and how it works.
 
-Aerodrome is a popular DeFi protocol, forked from Solidly which in turn drew heavy inspiration from Curve Finance. Users can lock $AERO tokens for periods of up to 4 years and in return receive voting power in the Aerodrome protocol.
+Aerodrome is a popular DeFi protocol, forked from Solidly which in turn drew heavy inspiration from Curve Finance. Users can lock $AERO tokens for periods of up to four years and in return receive voting power in the Aerodrome protocol.
 
 Voters in Aerodrome can direct future $AERO emissions by allocating their vote weight across _gauges_. A gauge in Aerodrome typically points to a particular liquidity pool (such as WETH-USDC). Users who provide liquidity in such a pool receive standard liquidity pool fees + emissions dictated by the % of votes that pool/gauge receives.
 
@@ -54,7 +53,7 @@ In Aerodrome, when you lock \$AERO, you receive a veNFT (Vote Escrowed NFT) whic
 - Lock Amount
 - Whether the lock should automatically renew until you manually choose to unlock ("Permanent")
 
-Assuming you don't opt for a permanent lock, you can choose to lock \$AERO for between 1 week and 4 years. You gain the maximum amount of voting power if you lock for 4 years.
+Assuming you don't opt for a permanent lock, you can choose to lock \$AERO for between one week and four years. You gain the maximum amount of voting power if you lock for four years.
 
 As the end date of your lock approaches, your voting power decreases. This can be visualised in the graph below:
 
@@ -146,13 +145,13 @@ For some protocols, this has worked. Especially in the case of low numbers of lo
 
 What if, instead, we ensured we kept an historical record of locks.
 
-## Checkpoints: Approach 1
+## Checkpoints: Approach One
 
 Checkpoints are absolutely critical for understanding the escrow mechanism in protocols like Curve and Aerodrome.
 
 Put simply: a checkpoint is written to the ledger every time a user makes a change to their lock. This records any changes in the users lock at that time, so that historical queries can return an accurate view of past state.
 
-> If you're familar with vote delegation in ERC20Votes, the motivation is exactly the same: we store historic checkpoints of voting power every times a user transfers tokens or changes delegation. The implementation in veTokens is more advanced but shares many of the same principles.
+> If you're familar with vote delegation in ERC20Votes, the motivation is exactly the same: we store historic checkpoints of voting power every time a user transfers tokens or changes delegation. The implementation in veTokens is more advanced but shares many of the same principles.
 
 Our basic information that we need for a checkpoint for a user deposit is:
 
@@ -197,7 +196,7 @@ Visually, you can see this as the `slope` of the User's voting power curve:
 A steeper slope = the user's voting power is decaying faster.
 A shallower slope = the user's voting power is decaying slower.
 
-Note that the `slope` here is _purely_ a function of the amount of $AERO tokens a user locks, because every user will go from 100% to 0% voting power per $AERO over a 4 year period:
+Note that the `slope` here is _purely_ a function of the amount of $AERO tokens a user locks, because every user will go from 100% to 0% voting power per $AERO over a four year period:
 
 ![image](https://github.com/user-attachments/assets/54791691-edc4-4523-b3c9-77253c4de4cf)
 
@@ -213,7 +212,7 @@ Aerodrome uses some further mathematical conventions here, we've already discuss
 
 ![image](https://github.com/user-attachments/assets/e704ddd3-93a6-433d-b9d5-122209315136)
 
-In the above chart you can see that, at 2 years, we add a new deposit without increasing the lock duration. This defines a new, steeper `slope` (a higher rate of decay in voting power), and a new bias - the new starting point of this "new" curve.
+In the above chart you can see that, at two years, we add a new deposit without increasing the lock duration. This defines a new, steeper `slope` (a higher rate of decay in voting power), and a new bias - the new starting point of this "new" curve.
 
 With this info, we can rewrite our `UserPoint` struct. We move the user's _current_ balance and endDate into a separate struct `LockedBalance`, and then defined the `UserPoint` struct only to contain information about the user's _decay curve_ at that point in time. We also add in block numbers along with timestamps to ensure clocks are synchronised in the past - here is the full `UserPoint` struct:
 
@@ -311,7 +310,7 @@ Let's start with the variables passed to the function.
 
 In Aerodrome, the balanceOfNFTAt function is defined inside a library known as BalanceLogicLibrary. This allows us to use storage mappings as arguments in the library, which can then be passed to the balance function.
 
-We have 2 such mappings: `userPointEpoch` and `userPointHistory`. Respectively these are used to track the length of the array and to store our user points.
+We have two such mappings: `userPointEpoch` and `userPointHistory`. Respectively these are used to track the length of the array and to store our user points.
 
 > Why not use `UserPoint[]`? This is likely a carryover from the original [Vyper Implementation](https://github.com/curvefi/curve-dao-contracts/blob/master/contracts/VotingEscrow.vy#L95). Vyper introduced the DynArray type in 0.3.2, after the Curve contracts were written.
 
@@ -328,9 +327,9 @@ Note that:
 - User Epochs are written at 1
 - If userEpoch = 0, that means we have no data for that tokenId
 
-This function does 2 things:
+This function does two things:
 
-**Step 1: check for early return cases**
+**Step One: check for early return cases**
 
 Before we commit to the binary search, we check some simple cases to save gas, specifically:
 
@@ -350,7 +349,7 @@ Before we commit to the binary search, we check some simple cases to save gas, s
 
 ```
 
-**Step 2: Perform binary search**
+**Step Two: Perform binary search**
 
 Explaining binary search in depth is beyond the scope of this article, but suffice to say that, for an arbitrary timestamp `t`, Binary search allows us to query a sorted array in O(log N) time complexity.
 
@@ -407,7 +406,7 @@ It's of course possible to evaluate every User Point at a given time, and add th
 
 What can we do to solve this problem?
 
-Well, it helps to remind ourselves of 3 facts:
+Well, it helps to remind ourselves of three facts:
 
 1. Global voting power at time `t` is just the aggregate of all User voting power at time `t`
 2. Every time we make a change to User Voting power, we record it as a `UserPoint`
@@ -455,7 +454,6 @@ Fortunately for us, we know all the above information - we store the `endDate` i
 What this means is that we can store a list of `slopeChanges`: times in the future when we need to _decrease_ the global `slope`, by removing the user's `slope`. Put another way, slope changes represent when the global voting power curve should get **shallower**, because a particular tokenId has no voting power left, and so is no longer decreasing.
 
 ![image](https://github.com/user-attachments/assets/64900788-6ed9-4f8f-991d-555f651f1698)
-
 
 That's the high level overview anyway, at this point we can start reviewing the full checkpointing implementation to see how it is achieved in practice.
 
@@ -748,7 +746,7 @@ If you've followed this far, most of the rest of the function should be fairly s
 
 In the event that a user changes her lock, we need to make adjustments to the slopeChanges to account for this.
 
-We primarily care about 3 things regarding slope changes:
+We primarily care about three things regarding slope changes:
 
 1. Has the old lock already ended?
 2. Has the new lock already ended?
